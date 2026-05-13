@@ -9,3 +9,10 @@
 ## 2024-04-19 - Isolating High-Frequency Animations
 **Learning:** `setInterval` states (like animation timers running at 100ms intervals) residing in high-level components (like `LandingPage` and `WelcomeScreen`) cause their entire component subtrees to re-render ten times a second. This leads to massive layout thrashing and poor responsiveness, especially when inputs are present.
 **Action:** Always extract high-frequency local state updates (like spinners or timers) into their own isolated, leaf-level components using `React.memo()`. Keep state strictly co-located with the UI that depends on it.
+## 2024-05-13 - Preventing Layout Thrashing on Hidden Elements
+**Learning:** React components that stream content updates (like `ToolCallMessage` and `ThinkingBlock`) can cause severe layout thrashing if they synchronously measure the DOM (e.g., `scrollHeight`) inside a `useEffect` on every update, *even when collapsed*. Furthermore, trying to optimize this by putting expressions like `isExpanded ? message : null` into the dependency array breaks React linting rules (`react-hooks/exhaustive-deps`).
+**Action:** Always guard expensive DOM measurements with a visibility check (`if (isExpanded)`) inside the effect itself. Keep dependency arrays simple and exhaustive (`[isExpanded, message]`).
+
+## 2024-05-13 - TOCTOU Vulnerability in File Initialization
+**Learning:** `Path::exists()` followed by `fs::write()` is a classic Time-Of-Check to Time-Of-Use (TOCTOU) race condition vulnerability, which manifests as flaky test failures in highly concurrent environments (like tests hitting the same file path).
+**Action:** Always use `OpenOptions::new().create_new(true).write(true).open()` to safely initialize a file only if it doesn't already exist.

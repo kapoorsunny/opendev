@@ -67,8 +67,20 @@ impl Mailbox {
         if let Some(parent) = self.inbox_path.parent() {
             fs::create_dir_all(parent)?;
         }
-        if !self.inbox_path.exists() {
-            fs::write(&self.inbox_path, "[]")?;
+        // Use atomic open to prevent TOCTOU between exists() and write()
+        match OpenOptions::new()
+            .create_new(true)
+            .write(true)
+            .open(&self.inbox_path)
+        {
+            Ok(mut file) => {
+                use std::io::Write;
+                file.write_all(b"[]")?;
+            }
+            Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {
+                // File already exists, which is fine
+            }
+            Err(e) => return Err(e),
         }
         Ok(())
     }

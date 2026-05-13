@@ -429,8 +429,13 @@ export function ToolCallMessage({ message, hasResult }: ToolCallMessageExtProps)
   const expandRef = useRef<HTMLDivElement>(null);
   const [expandHeight, setExpandHeight] = useState(0);
 
+  // ⚡ Bolt Performance Optimization:
+  // Avoid synchronous layout reflows from scrollHeight measurements
+  // when the component is collapsed. By checking `isExpanded` before measuring,
+  // we prevent unnecessary layout recalculations and subsequent state updates
+  // during streaming updates to the `message` prop while the block is hidden.
   useEffect(() => {
-    if (expandRef.current) {
+    if (isExpanded && expandRef.current) {
       setExpandHeight(expandRef.current.scrollHeight);
     }
   }, [isExpanded, message]);

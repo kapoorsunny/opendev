@@ -21,11 +21,16 @@ export function ThinkingBlock({ content, level, isActive }: ThinkingBlockProps) 
   const accentColor = isCritique ? 'border-l-amber-500/70' : 'border-l-indigo-500/70';
   const levelBadge = level && LEVEL_COLORS[level] ? level : null;
 
+  // ⚡ Bolt Performance Optimization:
+  // Avoid synchronous layout reflows from scrollHeight measurements
+  // when the component is collapsed. By checking `isExpanded` before measuring,
+  // we prevent unnecessary layout recalculations and subsequent state updates
+  // during streaming updates to the `content` prop while the block is hidden.
   useEffect(() => {
-    if (contentRef.current) {
+    if (isExpanded && contentRef.current) {
       setContentHeight(contentRef.current.scrollHeight);
     }
-  }, [content]);
+  }, [isExpanded, content]);
 
   return (
     <div className="animate-slide-up">
