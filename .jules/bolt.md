@@ -12,3 +12,7 @@
 ## 2024-05-13 - Preventing Layout Thrashing on Hidden Elements
 **Learning:** React components that stream content updates (like `ToolCallMessage` and `ThinkingBlock`) can cause severe layout thrashing if they synchronously measure the DOM (e.g., `scrollHeight`) inside a `useEffect` on every update, *even when collapsed*. Furthermore, trying to optimize this by putting expressions like `isExpanded ? message : null` into the dependency array breaks React linting rules (`react-hooks/exhaustive-deps`).
 **Action:** Always guard expensive DOM measurements with a visibility check (`if (isExpanded)`) inside the effect itself. Keep dependency arrays simple and exhaustive (`[isExpanded, message]`).
+
+## 2024-05-13 - TOCTOU Vulnerability in File Initialization
+**Learning:** `Path::exists()` followed by `fs::write()` is a classic Time-Of-Check to Time-Of-Use (TOCTOU) race condition vulnerability, which manifests as flaky test failures in highly concurrent environments (like tests hitting the same file path).
+**Action:** Always use `OpenOptions::new().create_new(true).write(true).open()` to safely initialize a file only if it doesn't already exist.
