@@ -154,7 +154,16 @@ pub fn load_skill_from_url_with_options(
 
     // Cache locally
     std::fs::create_dir_all(&skills_dir)?;
-    std::fs::write(&cache_path, &content)?;
+
+    let tmp_name = format!(".tmp-{}", uuid::Uuid::new_v4());
+    let tmp_path = skills_dir.join(&tmp_name);
+
+    let mut opts = std::fs::OpenOptions::new();
+    opts.write(true).create_new(true);
+    #[cfg(unix)]
+    std::os::unix::fs::OpenOptionsExt::mode(&mut opts, 0o600);
+    std::io::Write::write_all(&mut opts.open(&tmp_path)?, content.as_bytes())?;
+    std::fs::rename(&tmp_path, &cache_path)?;
     debug!("Cached skill to {:?}", cache_path);
 
     let fallback_name = extract_name_from_url(url);
