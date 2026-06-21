@@ -131,10 +131,26 @@ impl BackgroundTaskManager {
         let pid = child.id();
 
         // Write initial output
-        if !initial_output.is_empty()
-            && let Err(e) = std::fs::write(&output_file, initial_output)
-        {
-            warn!(task_id, "Failed to write initial output: {e}");
+        if !initial_output.is_empty() {
+            let mut opts = std::fs::OpenOptions::new();
+            opts.write(true).create_new(true);
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::OpenOptionsExt;
+                opts.mode(0o600);
+            }
+
+            match opts.open(&output_file) {
+                Ok(mut file) => {
+                    use std::io::Write;
+                    if let Err(e) = file.write_all(initial_output.as_bytes()) {
+                        warn!(task_id, "Failed to write initial output: {e}");
+                    }
+                }
+                Err(e) => {
+                    warn!(task_id, "Failed to write initial output: {e}");
+                }
+            }
         }
 
         let status = TaskStatus {
