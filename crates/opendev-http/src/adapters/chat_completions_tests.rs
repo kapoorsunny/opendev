@@ -26,6 +26,25 @@ fn test_parse_tool_call_args_as_string_delta() {
     }
 }
 
+#[test]
+fn test_parse_reasoning_content_delta() {
+    let chunk = json!({
+        "choices": [{
+            "delta": {
+                "content": null,
+                "reasoning_content": "I am Kimi Code 2.7."
+            }
+        }]
+    });
+    let event = ChatCompletionsAdapter::parse_chat_completions_sse(&chunk);
+    match event {
+        Some(StreamEvent::ReasoningDelta(delta)) => {
+            assert_eq!(delta, "I am Kimi Code 2.7.");
+        }
+        other => panic!("expected ReasoningDelta, got {other:?}"),
+    }
+}
+
 /// Regression (z.ai GLM-5.1, observed 2026-04-19): GLM-5.1 in OpenAI-compat
 /// mode emits `function.arguments` as a JSON *object* instead of the
 /// spec-mandated JSON-encoded string. The previous adapter silently dropped

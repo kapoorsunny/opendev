@@ -39,6 +39,12 @@ impl ChatCompletionsAdapter {
                 return Some(StreamEvent::TextDelta(text.to_string()));
             }
 
+            if let Some(text) = delta.get("reasoning_content").and_then(|c| c.as_str())
+                && !text.is_empty()
+            {
+                return Some(StreamEvent::ReasoningDelta(text.to_string()));
+            }
+
             if let Some(tc_deltas) = delta.get("tool_calls").and_then(|t| t.as_array()) {
                 for tc_delta in tc_deltas {
                     let idx = tc_delta.get("index").and_then(|i| i.as_u64()).unwrap_or(0) as usize;

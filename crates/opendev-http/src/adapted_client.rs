@@ -424,7 +424,7 @@ impl AdaptedClient {
 
                 if line.is_empty() {
                     // Empty line = end of SSE event block
-                    if !line_buf.is_empty() && line_buf.trim() == "data: [DONE]" {
+                    if !line_buf.is_empty() && crate::streaming::is_sse_done(&line_buf) {
                         stream_done = true;
                         line_buf.clear();
                         event_type = None;
@@ -532,10 +532,10 @@ impl AdaptedClient {
 
                 if let Some(et) = line.strip_prefix("event: ") {
                     event_type = Some(et.to_string());
-                } else if line.starts_with("data: ") {
+                } else if line.starts_with("data:") {
                     // Process any previous pending data line before starting a new one
                     if !line_buf.is_empty() {
-                        if line_buf.trim() == "data: [DONE]" {
+                        if crate::streaming::is_sse_done(&line_buf) {
                             stream_done = true;
                         } else if let Some(data_json) = crate::streaming::parse_sse_data(&line_buf)
                         {
@@ -560,7 +560,7 @@ impl AdaptedClient {
             // Eagerly process pending line_buf for stream-terminating events
             // that arrive without a trailing blank line (e.g. last chunk).
             if !stream_done && !line_buf.is_empty() {
-                if line_buf.trim() == "data: [DONE]" {
+                if crate::streaming::is_sse_done(&line_buf) {
                     stream_done = true;
                 } else if let Some(data_json) = crate::streaming::parse_sse_data(&line_buf) {
                     let et = event_type.as_deref().unwrap_or_else(|| {
@@ -727,6 +727,7 @@ impl AdaptedClient {
             .ok_or_else(|| HttpError::Other("No stdout from curl".to_string()))?;
 
         let mut accumulated_text = String::new();
+        let mut accumulated_reasoning = String::new();
         let mut tool_calls: Vec<serde_json::Value> = Vec::new();
         let mut current_tool_args: std::collections::HashMap<usize, String> =
             std::collections::HashMap::new();
@@ -762,8 +763,8 @@ impl AdaptedClient {
             if trimmed.is_empty() || trimmed.starts_with(':') {
                 continue;
             }
-            let data = match trimmed.strip_prefix("data: ") {
-                Some(d) => d.trim(),
+            let data = match trimmed.strip_prefix("data:") {
+                Some(d) => d.trim_start(),
                 None => continue,
             };
             if data == "[DONE]" {
@@ -788,6 +789,13 @@ impl AdaptedClient {
                     {
                         accumulated_text.push_str(text);
                         callback.on_event(&StreamEvent::TextDelta(text.to_string()));
+                    }
+
+                    if let Some(text) = delta.get("reasoning_content").and_then(|c| c.as_str())
+                        && !text.is_empty()
+                    {
+                        accumulated_reasoning.push_str(text);
+                        callback.on_event(&StreamEvent::ReasoningDelta(text.to_string()));
                     }
 
                     if let Some(tc_deltas) = delta.get("tool_calls").and_then(|t| t.as_array()) {
@@ -859,6 +867,9 @@ impl AdaptedClient {
         if !tool_calls.is_empty() {
             message["tool_calls"] = serde_json::Value::Array(tool_calls);
         }
+        if !accumulated_reasoning.is_empty() {
+            message["reasoning_content"] = serde_json::Value::String(accumulated_reasoning);
+        }
 
         let finish = match stop_reason.as_deref() {
             Some("tool_calls") => "tool_calls",
@@ -872,7 +883,11 @@ impl AdaptedClient {
             }
         };
 
-        if !stream_done && message["content"].is_null() && message.get("tool_calls").is_none() {
+        if !stream_done
+            && message["content"].is_null()
+            && message.get("tool_calls").is_none()
+            && message.get("reasoning_content").is_none()
+        {
             warn!("curl stream ended with no content");
             return Ok(HttpResult::fail(
                 "No response received from curl stream",

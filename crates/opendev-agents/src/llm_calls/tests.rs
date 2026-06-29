@@ -140,6 +140,24 @@ fn test_parse_response_with_reasoning_content() {
 }
 
 #[test]
+fn test_parse_response_uses_reasoning_content_when_content_empty() {
+    let caller = make_caller();
+    let body = serde_json::json!({
+        "choices": [{
+            "message": {
+                "role": "assistant",
+                "content": null,
+                "reasoning_content": "I am Kimi Code 2.7."
+            }
+        }]
+    });
+    let resp = caller.parse_action_response(&body);
+    assert!(resp.success);
+    assert_eq!(resp.content.as_deref(), Some("I am Kimi Code 2.7."));
+    assert_eq!(resp.reasoning_content.as_deref(), Some("I am Kimi Code 2.7."));
+}
+
+#[test]
 fn test_parse_action_response_extracts_finish_reason() {
     let caller = make_caller();
     let body = serde_json::json!({
