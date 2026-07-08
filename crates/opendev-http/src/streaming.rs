@@ -81,13 +81,21 @@ impl StreamCallback for CompositeStreamCallback<'_> {
     }
 }
 
-/// Parse a single SSE data line (after "data: " prefix) as JSON.
+/// Parse a single SSE data line as JSON.
 pub fn parse_sse_data(line: &str) -> Option<Value> {
-    let data = line.strip_prefix("data: ")?;
+    let data = line.strip_prefix("data:")?.trim_start();
     if data == "[DONE]" {
         return None;
     }
     serde_json::from_str(data).ok()
+}
+
+/// Return true when an SSE data line is the stream terminator.
+pub fn is_sse_done(line: &str) -> bool {
+    matches!(
+        line.trim().strip_prefix("data:"),
+        Some(data) if data.trim() == "[DONE]"
+    )
 }
 
 /// Parse an SSE event block (event type + data) from raw lines.
@@ -102,3 +110,7 @@ pub fn parse_sse_block(event_line: Option<&str>, data_line: &str) -> Option<(Str
     let data = parse_sse_data(data_line)?;
     Some((event_type, data))
 }
+
+#[cfg(test)]
+#[path = "streaming_tests.rs"]
+mod tests;

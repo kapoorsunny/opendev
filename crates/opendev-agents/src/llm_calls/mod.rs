@@ -252,12 +252,15 @@ impl LlmCaller {
             }
         };
 
-        let raw_content = message.get("content").and_then(|c| c.as_str());
-        let cleaned_content = self.cleaner.clean(raw_content);
         let reasoning_content = message
             .get("reasoning_content")
             .and_then(|r| r.as_str())
             .map(|s| s.to_string());
+        let raw_content = message.get("content").and_then(|c| c.as_str());
+        let content = raw_content
+            .filter(|c| !c.is_empty())
+            .or(reasoning_content.as_deref());
+        let cleaned_content = self.cleaner.clean(content);
 
         debug!(
             has_content = raw_content.is_some(),
