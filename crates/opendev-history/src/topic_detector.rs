@@ -174,7 +174,9 @@ impl TopicDetector {
                 .map(|t| {
                     let trimmed = t.trim().to_string();
                     if trimmed.len() > MAX_TITLE_LEN {
-                        trimmed[..MAX_TITLE_LEN].to_string()
+                        // floor_char_boundary avoids slicing mid-codepoint (panic)
+                        // on multibyte titles.
+                        trimmed[..trimmed.floor_char_boundary(MAX_TITLE_LEN)].to_string()
                     } else {
                         trimmed
                     }
@@ -268,7 +270,8 @@ async fn detect_and_update(
         let title = title.trim();
         if !title.is_empty() {
             let title = if title.len() > MAX_TITLE_LEN {
-                &title[..MAX_TITLE_LEN]
+                // floor_char_boundary avoids slicing mid-codepoint (panic).
+                &title[..title.floor_char_boundary(MAX_TITLE_LEN)]
             } else {
                 title
             };

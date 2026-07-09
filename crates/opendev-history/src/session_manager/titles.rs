@@ -34,19 +34,28 @@ pub fn get_forked_title(title: &str) -> String {
 }
 
 /// Truncate a string to at most `max_chars` characters at a word boundary.
+///
+/// Counts by characters (not bytes) so multibyte input — e.g. a prompt with an
+/// em-dash or CJK text — is never sliced mid-codepoint (which would panic).
 pub(super) fn truncate_at_word_boundary(text: &str, max_chars: usize) -> String {
-    if text.len() <= max_chars {
+    if text.chars().count() <= max_chars {
         return text.to_string();
     }
 
-    // Find the last space at or before max_chars
-    let truncated = &text[..max_chars];
+    // Byte offset of the boundary after `max_chars` characters.
+    let cut = text
+        .char_indices()
+        .nth(max_chars)
+        .map_or(text.len(), |(i, _)| i);
+    let truncated = &text[..cut];
+
+    // Find the last space at or before the cut (spaces are ASCII → byte-safe).
     if let Some(last_space) = truncated.rfind(' ')
         && last_space > 0
     {
         return format!("{}...", &text[..last_space]);
     }
 
-    // No word boundary found; hard-truncate
-    format!("{}...", truncated)
+    // No word boundary found; hard-truncate at the char boundary.
+    format!("{truncated}...")
 }
