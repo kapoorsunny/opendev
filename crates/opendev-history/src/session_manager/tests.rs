@@ -313,6 +313,31 @@ fn test_generate_title_exactly_60_chars() {
     assert_eq!(title, text);
 }
 
+#[test]
+fn test_generate_title_multibyte_at_boundary_no_panic() {
+    // Regression: an em-dash straddling the byte-60 truncation point used to
+    // panic with "byte index 60 is not a char boundary" and crash `-p` mode.
+    let text = "Use the bash tool to run exactly: echo HELLO_FROM_BASH_123 — then tell me what it printed.";
+    let msgs = vec![make_msg(Role::User, text)];
+    let title = generate_title_from_messages(&msgs).unwrap();
+    assert!(title.ends_with("..."));
+    // The kept prefix must be a valid substring of the original (no corruption).
+    assert!(text.starts_with(title.trim_end_matches('.').trim_end()));
+}
+
+#[test]
+fn test_generate_title_cjk_no_panic() {
+    // A long CJK message (每 char is 3 bytes) must truncate on a char boundary.
+    let text = "请帮我重构认证模块以使用新的令牌系统并修复所有相关的测试用例和文档说明确保向后兼容"
+        .repeat(2);
+    let msgs = vec![make_msg(Role::User, &text)];
+    let title = generate_title_from_messages(&msgs).unwrap();
+    assert!(title.ends_with("..."));
+    // No more than 60 characters of content were kept.
+    let kept = title.trim_end_matches('.');
+    assert!(kept.chars().count() <= 60);
+}
+
 // --- Archiving tests ---
 
 #[test]
