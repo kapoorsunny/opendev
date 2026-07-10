@@ -240,6 +240,8 @@ Mix and match providers per slot in `~/.opendev/settings.json`:
 
 See the [Provider Setup Guide](docs/providers.md) for the full list of env vars, fallback chains, and configuration options.
 
+OpenDev also works fully offline against local OpenAI-compatible endpoints (Ollama, LM Studio, llama-server): set `OPENDEV_DISABLE_REMOTE_MODELS=1` to skip the models.dev catalog fetch and point `OPENDEV_API_BASE_URL` (or `api_base_url` in settings) at your local endpoint. See [Offline and Air-Gapped Use](docs/providers.md#offline-and-air-gapped-use).
+
 ### MCP Integration
 
 Dynamic tool discovery via the Model Context Protocol for connecting to external tools and data sources.
