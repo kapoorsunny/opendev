@@ -43,6 +43,82 @@ fn test_runtime_debug_format() {
 }
 
 #[test]
+fn test_resolve_switch_credentials_keyless_builtin_fallback() {
+    // Empty registry (offline, cold cache) + keyless local provider:
+    // must fall back to builtin defaults and allow an empty API key.
+    let registry = opendev_config::ModelRegistry::new();
+    assert!(registry.providers.is_empty());
+    let config = AppConfig {
+        model_provider: "ollama".to_string(),
+        api_key: None,
+        ..AppConfig::default()
+    };
+
+    let (_, base_url) = resolve_switch_credentials(&registry, "ollama", &config)
+        .expect("keyless provider must not require an API key");
+    assert_eq!(base_url.as_deref(), Some("http://localhost:11434"));
+
+    let (_, base_url) = resolve_switch_credentials(&registry, "lmstudio", &config)
+        .expect("keyless provider must not require an API key");
+    assert_eq!(base_url.as_deref(), Some("http://localhost:1234"));
+}
+
+#[test]
+fn test_resolve_switch_credentials_missing_key_errors() {
+    // Provider that declares an API key env var which is not set, with no
+    // key stored in config: must error with the env var hint.
+    let mut registry = opendev_config::ModelRegistry::new();
+    registry.providers.insert(
+        "needskey".to_string(),
+        opendev_config::models_dev::ProviderInfo {
+            id: "needskey".to_string(),
+            name: "Needs Key".to_string(),
+            description: String::new(),
+            api_key_env: "OPENDEV_TEST_UNSET_KEY_XYZ".to_string(),
+            api_base_url: "https://api.needskey.example".to_string(),
+            models: std::collections::HashMap::new(),
+        },
+    );
+    let config = AppConfig {
+        model_provider: "needskey".to_string(),
+        api_key: None,
+        ..AppConfig::default()
+    };
+
+    let err = resolve_switch_credentials(&registry, "needskey", &config)
+        .expect_err("missing key for keyed provider must error");
+    assert!(
+        err.contains("OPENDEV_TEST_UNSET_KEY_XYZ"),
+        "hint missing: {err}"
+    );
+}
+
+#[test]
+fn test_resolve_switch_credentials_prefers_registry_base_url() {
+    // Registry entry overrides the builtin default for the same id.
+    let mut registry = opendev_config::ModelRegistry::new();
+    registry.providers.insert(
+        "ollama".to_string(),
+        opendev_config::models_dev::ProviderInfo {
+            id: "ollama".to_string(),
+            name: "Ollama".to_string(),
+            description: String::new(),
+            api_key_env: String::new(),
+            api_base_url: "http://10.0.0.5:11434".to_string(),
+            models: std::collections::HashMap::new(),
+        },
+    );
+    let config = AppConfig {
+        model_provider: "ollama".to_string(),
+        api_key: None,
+        ..AppConfig::default()
+    };
+
+    let (_, base_url) = resolve_switch_credentials(&registry, "ollama", &config).unwrap();
+    assert_eq!(base_url.as_deref(), Some("http://10.0.0.5:11434"));
+}
+
+#[test]
 fn test_build_system_prompt() {
     let tmp = tempfile::tempdir().unwrap();
     let config = AppConfig::default();

@@ -120,6 +120,26 @@ https://gateway.ai.cloudflare.com/v1/def31e2cf1530789c604bdaa2abbfcf1/openai-pro
 - For custom providers, `api_base_url` should be the compatibility base URL, not the full `/chat/completions` path unless you want to set it explicitly.
 - Environment variables now override stored `api_key` values from config, which makes shell-scoped testing of custom endpoints work correctly.
 
+## Offline and Air-Gapped Use
+
+OpenDev fetches its provider/model catalog from [models.dev](https://models.dev/api.json) at startup and caches it under `~/.opendev/cache/providers`. The catalog is optional: when models.dev is unreachable, OpenDev falls back to built-in defaults for 12 well-known providers (OpenAI, Anthropic, Google, Groq, Fireworks, Mistral, DeepSeek, OpenRouter, Together, xAI, Ollama, LM Studio), so fully offline setups keep working — including the first-run setup wizard.
+
+Environment variables for offline environments:
+
+- `OPENDEV_DISABLE_REMOTE_MODELS` — set to `1` (or `true`/`yes`) to skip the models.dev fetch entirely. Recommended on air-gapped machines to avoid the network timeout at startup.
+- `OPENDEV_MODELS_DEV_PATH` — path to a local copy of the models.dev catalog (`api.json`). Lets you supply a full model catalog without network access.
+- `OPENDEV_API_BASE_URL` — overrides the API base URL for the active provider (equivalent to `api_base_url` in `settings.json`). Point it at your local OpenAI-compatible endpoint (llama-server, Ollama, LM Studio, vLLM, ...). Include the `http://` scheme.
+
+Example: fully offline against a local llama-server:
+
+```bash
+export OPENDEV_DISABLE_REMOTE_MODELS=1
+export OPENDEV_API_BASE_URL="http://127.0.0.1:8080/v1"
+opendev -p "hello"
+```
+
+The local providers `ollama` and `lmstudio` require no API key; their default endpoints (`http://localhost:11434` and `http://localhost:1234`) are built in.
+
 ## Workflow Model Binding
 
 OpenDev is a compound AI system. Instead of one model doing everything, it has workflow slots, each independently bound to a model and provider:

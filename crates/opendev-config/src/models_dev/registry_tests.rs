@@ -197,6 +197,50 @@ fn test_builtin_provider_unknown_returns_none() {
 }
 
 #[test]
+fn test_builtin_providers_enumeration() {
+    let providers = ModelRegistry::builtin_providers();
+    assert_eq!(providers.len(), 12, "should enumerate 12 builtin providers");
+
+    // Every entry must match its per-id builtin lookup
+    for provider in &providers {
+        let single = ModelRegistry::builtin_provider(&provider.id)
+            .unwrap_or_else(|| panic!("builtin_provider should return Some for {}", provider.id));
+        assert_eq!(provider.name, single.name);
+        assert_eq!(provider.api_key_env, single.api_key_env);
+        assert_eq!(provider.api_base_url, single.api_base_url);
+        assert!(provider.models.is_empty());
+    }
+
+    // Ids are unique
+    let mut ids: Vec<&str> = providers.iter().map(|p| p.id.as_str()).collect();
+    let sorted_len = {
+        let mut deduped = ids.clone();
+        deduped.sort_unstable();
+        deduped.dedup();
+        deduped.len()
+    };
+    assert_eq!(sorted_len, ids.len(), "builtin provider ids must be unique");
+
+    // Sorted: priority providers first (in PRIORITY_PROVIDERS order), then alphabetical
+    ids.sort_by_key(|a| provider_sort_key(a));
+    let expected: Vec<&str> = providers.iter().map(|p| p.id.as_str()).collect();
+    assert_eq!(ids, expected, "builtin providers must be priority-sorted");
+    assert_eq!(providers[0].id, "openai");
+    assert_eq!(providers[1].id, "anthropic");
+}
+
+#[test]
+fn test_builtin_providers_include_keyless_locals() {
+    let providers = ModelRegistry::builtin_providers();
+    let ollama = providers.iter().find(|p| p.id == "ollama").unwrap();
+    assert!(ollama.api_key_env.is_empty());
+    assert_eq!(ollama.api_base_url, "http://localhost:11434");
+    let lmstudio = providers.iter().find(|p| p.id == "lmstudio").unwrap();
+    assert!(lmstudio.api_key_env.is_empty());
+    assert_eq!(lmstudio.api_base_url, "http://localhost:1234");
+}
+
+#[test]
 fn test_get_provider_or_builtin_prefers_registry() {
     let mut registry = ModelRegistry::new();
 

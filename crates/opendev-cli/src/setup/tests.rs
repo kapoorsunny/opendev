@@ -24,6 +24,77 @@ fn test_setup_error_display() {
 }
 
 #[test]
+fn test_merge_builtin_providers_into_empty_registry() {
+    let mut registry = ModelRegistry::new();
+    assert!(registry.providers.is_empty());
+
+    let added = merge_builtin_providers(&mut registry);
+    assert!(added, "builtins should be added to an empty registry");
+    assert_eq!(registry.providers.len(), 12);
+
+    // Well-known providers are now selectable
+    for id in ["openai", "anthropic", "ollama", "lmstudio", "google"] {
+        assert!(
+            registry.get_provider(id).is_some(),
+            "builtin provider '{id}' should be present after merge"
+        );
+    }
+
+    // Keyless local providers keep their empty api_key_env and localhost URL
+    let ollama = registry.get_provider("ollama").unwrap();
+    assert!(ollama.api_key_env.is_empty());
+    assert_eq!(ollama.api_base_url, "http://localhost:11434");
+
+    // Merging again is a no-op
+    assert!(!merge_builtin_providers(&mut registry));
+    assert_eq!(registry.providers.len(), 12);
+}
+
+#[test]
+fn test_merge_builtin_providers_keeps_registry_entries() {
+    let mut registry = ModelRegistry::new();
+    registry.providers.insert(
+        "openai".to_string(),
+        opendev_config::models_dev::ProviderInfo {
+            id: "openai".to_string(),
+            name: "Custom OpenAI".to_string(),
+            description: "from cache".to_string(),
+            api_key_env: "CUSTOM_OPENAI_KEY".to_string(),
+            api_base_url: "https://proxy.example.com".to_string(),
+            models: HashMap::new(),
+        },
+    );
+
+    let added = merge_builtin_providers(&mut registry);
+    assert!(added, "missing builtins should still be added");
+    assert_eq!(registry.providers.len(), 12);
+
+    // The registry (cache) entry wins over the builtin default
+    let openai = registry.get_provider("openai").unwrap();
+    assert_eq!(openai.name, "Custom OpenAI");
+    assert_eq!(openai.api_key_env, "CUSTOM_OPENAI_KEY");
+    assert_eq!(openai.api_base_url, "https://proxy.example.com");
+}
+
+#[test]
+fn test_get_api_key_allows_keyless_providers() {
+    // Providers with an empty env_var (ollama, lmstudio) must not require a
+    // key — and must not touch stdin.
+    let provider_config = ProviderConfig {
+        id: "ollama".to_string(),
+        name: "Ollama".to_string(),
+        description: "Ollama models".to_string(),
+        env_var: String::new(),
+        api_base_url: "http://localhost:11434".to_string(),
+        api_format: providers::ApiFormat::OpenAi,
+        models: Vec::new(),
+    };
+
+    let key = get_api_key(&provider_config).expect("keyless provider should not error");
+    assert!(key.is_empty());
+}
+
+#[test]
 fn test_setup_error_variants() {
     let errors: Vec<SetupError> = vec![
         SetupError::Cancelled,
