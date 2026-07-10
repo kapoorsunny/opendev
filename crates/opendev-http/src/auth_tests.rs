@@ -67,16 +67,21 @@ fn test_credential_store_persistence() {
     let dir = tempfile::tempdir().unwrap();
     let auth_path = dir.path().join("auth.json");
 
+    // Use a provider with no env var so a developer's real ANTHROPIC_API_KEY /
+    // OPENAI_API_KEY cannot shadow the stored credential via get_key's env lookup.
     // Write with one instance
     {
         let mut store = CredentialStore::new(Some(auth_path.clone()));
-        store.set_key("anthropic", "sk-ant-123").unwrap();
+        store.set_key("testprovider", "sk-test-123").unwrap();
     }
 
     // Read with a new instance
     {
         let mut store = CredentialStore::new(Some(auth_path));
-        assert_eq!(store.get_key("anthropic").as_deref(), Some("sk-ant-123"));
+        assert_eq!(
+            store.get_key("testprovider").as_deref(),
+            Some("sk-test-123")
+        );
     }
 }
 
