@@ -221,7 +221,7 @@ impl ReactLoop {
                 http_client,
                 messages,
                 schemas_to_send,
-                &state,
+                &mut state,
                 &emitter,
                 task_monitor,
                 cancel,

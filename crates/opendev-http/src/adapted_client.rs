@@ -305,9 +305,13 @@ impl AdaptedClient {
         let url = streaming_url_owned.as_deref().unwrap_or(base_url);
 
         // Send request and get raw response for streaming.
-        // On failure (after internal retries are exhausted), soft-fail to an
-        // HttpResult so the react loop can retry on the next iteration, matching
-        // the non-streaming post_json behavior.
+        // On transient failure (after internal retries are exhausted), soft-fail
+        // to a retryable HttpResult so the react loop can retry on the next
+        // iteration, matching the non-streaming post_json behavior. Definitive
+        // failures (401/403/404/400, non-retryable transport errors) must NOT
+        // be marked retryable: doing so previously trapped the react loop in a
+        // silent infinite retry cycle on bad API keys or wrong base URLs
+        // (issues #13, #110).
         debug!(url = %url, "Sending streaming request");
         let response = match self
             .client
@@ -317,8 +321,13 @@ impl AdaptedClient {
             Ok(resp) => resp,
             Err(HttpError::Interrupted) => return Ok(HttpResult::interrupted()),
             Err(e) => {
-                warn!(error = %e, "Streaming request failed after retries, soft-failing");
-                return Ok(HttpResult::fail(e.to_string(), true));
+                let retryable = e.is_retryable();
+                if retryable {
+                    warn!(error = %e, "Streaming request failed after retries, soft-failing");
+                } else {
+                    warn!(error = %e, "Streaming request failed with non-retryable error, failing fast");
+                }
+                return Ok(HttpResult::fail(e.to_string(), retryable));
             }
         };
 

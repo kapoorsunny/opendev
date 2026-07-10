@@ -16,6 +16,9 @@ pub enum HttpError {
     #[error("All retries exhausted: {message}")]
     RetriesExhausted { message: String },
 
+    #[error("{0}")]
+    CircuitOpen(String),
+
     #[error("Authentication error: {0}")]
     Auth(String),
 
@@ -27,6 +30,27 @@ pub enum HttpError {
 
     #[error("{0}")]
     Other(String),
+}
+
+impl HttpError {
+    /// Whether this error represents a transient failure worth retrying.
+    ///
+    /// Retryable: exhausted retries on transient statuses (429/5xx), an open
+    /// circuit breaker (closes again after cooldown), and transient transport
+    /// errors (connect/timeout). Everything else — definitive 4xx responses
+    /// (401/403/404/400), auth errors, IO/JSON errors — is a hard failure
+    /// that retrying cannot fix.
+    pub fn is_retryable(&self) -> bool {
+        match self {
+            HttpError::RetriesExhausted { .. } | HttpError::CircuitOpen(_) => true,
+            HttpError::Request(e) => e.is_connect() || e.is_timeout() || e.is_request(),
+            HttpError::Interrupted
+            | HttpError::Auth(_)
+            | HttpError::Io(_)
+            | HttpError::Json(_)
+            | HttpError::Other(_) => false,
+        }
+    }
 }
 
 /// Result of an HTTP request attempt.

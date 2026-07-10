@@ -23,6 +23,10 @@ pub(super) struct LoopState {
     pub iteration: usize,
     pub consecutive_no_tool_calls: usize,
     pub consecutive_truncations: usize,
+    /// Consecutive failed LLM calls (retryable HTTP failures). Reset on any
+    /// successful call. When it reaches the cap in `llm_call.rs`, the loop
+    /// returns a real error instead of retrying forever.
+    pub consecutive_llm_failures: usize,
     pub doom_detector: DoomLoopDetector,
 
     /// Per-subdirectory instruction injection tracker.
@@ -91,6 +95,7 @@ impl LoopState {
             iteration: 0,
             consecutive_no_tool_calls: 0,
             consecutive_truncations: 0,
+            consecutive_llm_failures: 0,
             doom_detector: DoomLoopDetector::new(),
             subdir_tracker,
             startup_paths,
