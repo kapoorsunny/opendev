@@ -7,6 +7,23 @@ use tracing::{debug, warn};
 use super::sync::{is_cache_stale, sync_provider_cache, sync_provider_cache_async};
 use super::{DEFAULT_CACHE_TTL, ModelInfo, PRIORITY_PROVIDERS, ProviderInfo};
 
+/// Canonical ids of the built-in fallback providers ("gemini" is an alias
+/// for "google" and is not listed separately).
+const BUILTIN_PROVIDER_IDS: &[&str] = &[
+    "anthropic",
+    "openai",
+    "ollama",
+    "google",
+    "groq",
+    "fireworks",
+    "mistral",
+    "deepseek",
+    "openrouter",
+    "together",
+    "xai",
+    "lmstudio",
+];
+
 /// Sort key for providers: priority providers first (in order), then alphabetical.
 fn provider_sort_key(provider_id: &str) -> (u8, usize, String) {
     if let Some(idx) = PRIORITY_PROVIDERS.iter().position(|&p| p == provider_id) {
@@ -221,6 +238,19 @@ impl ModelRegistry {
             api_base_url: api_base_url.to_string(),
             models: std::collections::HashMap::new(),
         })
+    }
+
+    /// Enumerate all built-in fallback providers, sorted by priority then name.
+    ///
+    /// Used when the models.dev registry is unavailable (e.g. offline first
+    /// run) so callers can still offer the well-known provider list.
+    pub fn builtin_providers() -> Vec<ProviderInfo> {
+        let mut providers: Vec<ProviderInfo> = BUILTIN_PROVIDER_IDS
+            .iter()
+            .filter_map(|id| Self::builtin_provider(id))
+            .collect();
+        providers.sort_by_key(|p| provider_sort_key(&p.id));
+        providers
     }
 
     /// Get provider info from registry, falling back to built-in defaults.

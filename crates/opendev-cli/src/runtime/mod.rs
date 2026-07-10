@@ -837,24 +837,8 @@ impl AgentRuntime {
 
         // If provider changed, rebuild the HTTP client
         if new_provider_id != current_provider {
-            let provider_info = registry.get_provider(&new_provider_id);
-            let registry_env = provider_info.map(|pi| pi.api_key_env.as_str());
-            let api_key = self
-                .config
-                .get_api_key_with_env(registry_env)
-                .unwrap_or_default();
-
-            if api_key.is_empty() {
-                let env_hint = registry_env.filter(|s| !s.is_empty()).unwrap_or("API_KEY");
-                return Err(format!(
-                    "No API key for provider '{}'. Set {} environment variable.",
-                    new_provider_id, env_hint
-                ));
-            }
-
-            let base_url = provider_info
-                .map(|pi| pi.api_base_url.clone())
-                .filter(|s| !s.is_empty());
+            let (api_key, base_url) =
+                resolve_switch_credentials(&registry, &new_provider_id, &self.config)?;
             let new_client = Self::build_http_client(
                 &new_provider_id,
                 &api_key,
@@ -1028,6 +1012,39 @@ impl AgentRuntime {
         };
         Ok(client)
     }
+}
+
+/// Resolve the API key and base URL for a provider switch.
+///
+/// Falls back to built-in provider defaults when the registry has no entry
+/// (e.g. empty models.dev cache when offline), and allows an empty API key
+/// for keyless local providers (ollama, lmstudio) whose `api_key_env` is
+/// empty.
+fn resolve_switch_credentials(
+    registry: &opendev_config::ModelRegistry,
+    provider_id: &str,
+    config: &opendev_models::AppConfig,
+) -> Result<(String, Option<String>), String> {
+    let provider_info = registry.get_provider_or_builtin(provider_id);
+    let registry_env = provider_info.as_ref().map(|pi| pi.api_key_env.as_str());
+    let api_key = config
+        .get_api_key_with_env(registry_env)
+        .unwrap_or_default();
+
+    // Providers that declare no API key env var are keyless local providers.
+    let keyless = registry_env.is_some_and(str::is_empty);
+    if api_key.is_empty() && !keyless {
+        let env_hint = registry_env.filter(|s| !s.is_empty()).unwrap_or("API_KEY");
+        return Err(format!(
+            "No API key for provider '{}'. Set {} environment variable.",
+            provider_id, env_hint
+        ));
+    }
+
+    let base_url = provider_info
+        .map(|pi| pi.api_base_url)
+        .filter(|s| !s.is_empty());
+    Ok((api_key, base_url))
 }
 
 impl std::fmt::Debug for AgentRuntime {

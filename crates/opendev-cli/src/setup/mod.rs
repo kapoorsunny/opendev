@@ -9,7 +9,7 @@ mod rail_ui;
 use std::collections::HashMap;
 use std::io;
 
-use opendev_config::models_dev::ModelRegistry;
+use opendev_config::models_dev::{ModelRegistry, sync_provider_cache};
 use opendev_config::{ConfigLoader, Paths};
 use opendev_models::AppConfig;
 use thiserror::Error;
@@ -44,10 +44,57 @@ pub enum SetupError {
 
 // ── Public API ──────────────────────────────────────────────────────────────
 
+/// Minimum provider count below which the models.dev cache is considered
+/// implausibly small (partial/corrupted sync).
+const MIN_PLAUSIBLE_PROVIDERS: usize = 3;
+
 /// Check whether a global settings file already exists.
 pub fn config_exists() -> bool {
     let paths = Paths::default();
     paths.global_settings().exists()
+}
+
+/// Merge built-in provider defaults into a sparse registry.
+///
+/// Registry entries win over builtins. Returns `true` if any built-in
+/// providers were added.
+fn merge_builtin_providers(registry: &mut ModelRegistry) -> bool {
+    let mut added = false;
+    for provider in ModelRegistry::builtin_providers() {
+        if !registry.providers.contains_key(&provider.id) {
+            registry.providers.insert(provider.id.clone(), provider);
+            added = true;
+        }
+    }
+    added
+}
+
+/// Load the model registry for the wizard, falling back to built-in
+/// providers when the models.dev registry is unavailable.
+fn load_wizard_registry(cache_dir: &std::path::Path) -> ModelRegistry {
+    let mut registry = ModelRegistry::load_from_cache(cache_dir);
+
+    // A non-empty cache with implausibly few providers usually means a
+    // partial/interrupted sync — attempt a foreground re-sync before
+    // falling back. (An empty cache already triggered a sync attempt
+    // inside `load_from_cache`.)
+    if !registry.providers.is_empty() && registry.providers.len() < MIN_PLAUSIBLE_PROVIDERS {
+        let resynced = sync_provider_cache(Some(cache_dir), Some(std::time::Duration::ZERO));
+        if matches!(resynced, Ok(true)) {
+            registry = ModelRegistry::load_from_cache(cache_dir);
+        }
+    }
+
+    // models.dev still unavailable (e.g. offline first run) — fall back to
+    // the built-in provider list instead of aborting the wizard.
+    if registry.providers.len() < MIN_PLAUSIBLE_PROVIDERS && merge_builtin_providers(&mut registry)
+    {
+        rail_dim(
+            "models.dev is unreachable — showing built-in providers; model lists may be limited.",
+        );
+    }
+
+    registry
 }
 
 /// Run the interactive setup wizard.
@@ -56,12 +103,7 @@ pub fn config_exists() -> bool {
 pub async fn run_setup_wizard() -> Result<AppConfig, SetupError> {
     let paths = Paths::default();
     let cache_dir = paths.global_cache_dir();
-    let registry = ModelRegistry::load_from_cache(&cache_dir);
-    if registry.providers.is_empty() {
-        return Err(SetupError::RegistryError(
-            "No provider data available. Check network connectivity and retry.".into(),
-        ));
-    }
+    let registry = load_wizard_registry(&cache_dir);
 
     // ─── Welcome ────────────────────────────────────────────────────────
     rail_intro();
@@ -75,7 +117,7 @@ pub async fn run_setup_wizard() -> Result<AppConfig, SetupError> {
 
     let api_key = get_api_key(&provider_config)?;
 
-    if rail_confirm("Validate API key?", true)? {
+    if !api_key.is_empty() && rail_confirm("Validate API key?", true)? {
         let spinner = rail_spinner_start("Validating API key...");
         let result = ProviderSetup::validate_api_key(&provider_config, &api_key).await;
         spinner.stop();
@@ -233,7 +275,7 @@ fn configure_slot(
                 return Ok((normal_provider_id.to_string(), normal_model_id.to_string()));
             }
         };
-        if rail_confirm("Validate API key?", true)? {
+        if !slot_api_key.is_empty() && rail_confirm("Validate API key?", true)? {
             match tokio::runtime::Handle::try_current() {
                 Ok(handle) => {
                     let spinner = rail_spinner_start("Validating API key...");
@@ -328,6 +370,10 @@ fn show_summary(
             .map(|p| p.api_key_env.as_str())
             .unwrap_or("")
             .to_string();
+        if env_var.is_empty() {
+            // Keyless provider (e.g. ollama, lmstudio) — nothing to show.
+            continue;
+        }
         let env_set = std::env::var(&env_var).is_ok();
         let status = if env_set { "set" } else { "configured" };
         key_lines.push(format!("${env_var} ({status})"));
@@ -397,6 +443,17 @@ fn select_provider(registry: &ModelRegistry) -> Result<String, SetupError> {
 
 fn get_api_key(provider_config: &ProviderConfig) -> Result<String, SetupError> {
     let env_var = &provider_config.env_var;
+
+    // Keyless local providers (e.g. Ollama, LM Studio) declare no API key
+    // env var — don't demand a key for them.
+    if env_var.is_empty() {
+        rail_dim(&format!(
+            "  {} does not require an API key.",
+            provider_config.name
+        ));
+        return Ok(String::new());
+    }
+
     let env_key = std::env::var(env_var).ok().filter(|k| !k.is_empty());
 
     if let Some(ref ek) = env_key
@@ -430,6 +487,22 @@ fn select_model(
     registry: &ModelRegistry,
 ) -> Result<String, SetupError> {
     let models = ProviderSetup::get_provider_models(registry, provider_id);
+
+    // No model catalog available (e.g. built-in fallback provider while
+    // offline) — go straight to the custom model-id prompt.
+    if models.is_empty() {
+        rail_label(
+            "Model",
+            &format!("enter a {} model ID", provider_config.name),
+        );
+        let custom_id = rail_prompt("Enter model ID:", false)?;
+        if custom_id.is_empty() {
+            rail_dim("No model ID provided");
+            return Err(SetupError::NoModel);
+        }
+        rail_answer(&custom_id);
+        return Ok(custom_id);
+    }
 
     let mut model_choices: Vec<(String, String, String)> = models;
     model_choices.push((
