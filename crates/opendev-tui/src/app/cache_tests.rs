@@ -703,3 +703,26 @@ fn test_25_subagents_render_to_terminal() {
 }
 
 // -- Slash command argument parsing tests --
+
+// ---------------------------------------------------------------
+// Conversation viewport height vs. wrapped input height (issue #61)
+// ---------------------------------------------------------------
+
+#[test]
+fn test_conversation_viewport_shrinks_for_wrapped_input() {
+    let mut app = App::new();
+    app.state.terminal_width = 80;
+    app.state.terminal_height = 24;
+
+    // Empty input: input height 2 → conv = 24 - 2 - 2 = 20 → viewport 19
+    let base = app.conversation_viewport_height();
+    assert_eq!(base, 19);
+
+    // A long unbroken line wraps to 3 rows → input height 4 → viewport 17.
+    // Must agree with App::input_area_height (single source of truth).
+    app.state.input_buffer = "a".repeat(200);
+    let wrapped = app.conversation_viewport_height();
+    assert_eq!(wrapped, 17);
+    let input_h = app.input_area_height(app.state.terminal_width) as usize;
+    assert_eq!(base - wrapped, input_h - 2);
+}
