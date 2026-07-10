@@ -13,6 +13,17 @@ use super::App;
 use super::OperationMode;
 
 impl App {
+    /// Total input area height: soft-wrapped text rows + 1 separator row,
+    /// capped at 8. `width` is the full input area width (terminal width).
+    ///
+    /// Single source of truth for the input height — used by the main layout,
+    /// selection geometry, and the cached conversation viewport. These must
+    /// agree or scroll/selection math desyncs from the real layout.
+    pub(super) fn input_area_height(&self, width: u16) -> u16 {
+        let rows = crate::widgets::input_visual_rows(&self.state.input_buffer, width).min(7);
+        rows as u16 + 1
+    }
+
     fn spinner_wrapped_line_count(&self, content_width: u16) -> usize {
         let widget = ConversationWidget::new(&self.state.messages, self.state.scroll_offset)
             .working_dir(&self.state.working_dir)
@@ -70,10 +81,7 @@ impl App {
                 [
                     layout::Constraint::Min(5),              // conversation
                     layout::Constraint::Length(todo_height), // todo panel
-                    layout::Constraint::Length({
-                        let input_lines = self.state.input_buffer.matches('\n').count() + 1;
-                        (input_lines as u16 + 1).min(8) // +1 for separator, cap at 8
-                    }), // input
+                    layout::Constraint::Length(self.input_area_height(area.width)), // input
                     layout::Constraint::Length(2),           // status bar
                 ]
                 .as_ref(),
@@ -340,8 +348,7 @@ impl App {
             self.state.todo_items.len(),
             self.state.todo_expanded,
         );
-        let input_lines = self.state.input_buffer.matches('\n').count() + 1;
-        let input_height = (input_lines as u16 + 1).min(8);
+        let input_height = self.input_area_height(self.state.terminal_width);
 
         let total_height = self.state.terminal_height;
         let conv_height = total_height

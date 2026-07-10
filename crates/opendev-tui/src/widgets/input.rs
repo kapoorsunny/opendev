@@ -1,5 +1,7 @@
 //! User input/prompt widget.
 
+use std::ops::Range;
+
 use ratatui::{
     buffer::Buffer,
     layout::Rect,
@@ -7,9 +9,59 @@ use ratatui::{
     text::{Line, Span},
     widgets::{Paragraph, Widget},
 };
-use unicode_width::UnicodeWidthStr;
+use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 use crate::formatters::style_tokens;
+
+/// Display width of the input line prefix: `"> "` on the first visual row and
+/// `style_tokens::Indent::CONT` on every other row are both 2 columns wide.
+const PREFIX_WIDTH: usize = 2;
+
+/// Soft-wrap one logical line into visual rows of at most `content_width`
+/// display columns, returning the byte range of each row.
+///
+/// Ranges always fall on `char` boundaries, and widths are accumulated with
+/// `unicode-width` so CJK/emoji wrap by display width rather than char count.
+/// A line whose final row is exactly full gets a trailing empty range so the
+/// end-of-line cursor cell has a row to land on (and height math stays in
+/// sync with rendering). `content_width == 0` disables wrapping (one row).
+pub fn wrap_line(line: &str, content_width: usize) -> Vec<Range<usize>> {
+    let mut ranges = Vec::new();
+    if content_width == 0 {
+        ranges.push(0..line.len());
+        return ranges;
+    }
+    let mut row_start = 0usize;
+    let mut row_width = 0usize;
+    for (idx, ch) in line.char_indices() {
+        let w = UnicodeWidthChar::width(ch).unwrap_or(0);
+        // Start a new row when this char would overflow — unless the row is
+        // empty (a char wider than content_width still occupies one row).
+        if row_width + w > content_width && row_width > 0 {
+            ranges.push(row_start..idx);
+            row_start = idx;
+            row_width = 0;
+        }
+        row_width += w;
+    }
+    ranges.push(row_start..line.len());
+    // Exactly-full last row: append an empty row for the end-of-line cursor.
+    if row_width >= content_width && !line.is_empty() {
+        ranges.push(line.len()..line.len());
+    }
+    ranges
+}
+
+/// Total number of visual rows the input buffer occupies when soft-wrapped
+/// into an input area `width` columns wide (the prefix width is subtracted
+/// internally, matching [`InputWidget`] rendering). An empty buffer is 1 row.
+pub fn input_visual_rows(buffer: &str, width: u16) -> usize {
+    let content_width = (width as usize).saturating_sub(PREFIX_WIDTH);
+    buffer
+        .split('\n')
+        .map(|line| wrap_line(line, content_width).len())
+        .sum()
+}
 
 /// Convert a title to kebab-case display: lowercase, spaces→dashes, strip special chars.
 fn to_kebab_display(title: &str) -> String {
@@ -165,10 +217,12 @@ impl Widget for InputWidget<'_> {
             ];
             Paragraph::new(Line::from(content)).render(text_area, buf);
         } else {
-            // Split buffer into lines and render each with proper prefix
+            let content_width = (text_area.width as usize).saturating_sub(PREFIX_WIDTH);
+
+            // Split buffer into logical lines
             let input_lines: Vec<&str> = self.buffer.split('\n').collect();
 
-            // Compute which line and column the cursor is on
+            // Compute which logical line and byte column the cursor is on
             let mut cursor_line = 0;
             let mut cursor_col = 0;
             let mut pos = 0;
@@ -185,23 +239,61 @@ impl Widget for InputWidget<'_> {
                 }
             }
 
+            // Soft-wrap every logical line into visual rows and locate the
+            // cursor's visual row. A cursor sitting exactly on a wrap seam
+            // belongs to the row that starts there; a cursor at end-of-line
+            // belongs to the line's last row (as a virtual cell).
+            let mut visual_rows: Vec<(usize, Range<usize>)> = Vec::new();
+            let mut cursor_row = 0usize;
+            for (i, line_text) in input_lines.iter().enumerate() {
+                let ranges = wrap_line(line_text, content_width);
+                let last = ranges.len() - 1;
+                for (j, range) in ranges.into_iter().enumerate() {
+                    // Cursor is on this row if the range contains it, or if
+                    // it sits at end-of-line and this is the line's last row.
+                    if i == cursor_line
+                        && range.start <= cursor_col
+                        && (cursor_col < range.end || j == last)
+                    {
+                        cursor_row = visual_rows.len();
+                    }
+                    visual_rows.push((i, range));
+                }
+            }
+
+            // Vertical scroll-into-view: when the wrapped rows exceed the
+            // capped height, skip leading rows so the cursor row is visible.
+            let visible = text_height as usize;
+            let scroll = if visual_rows.len() > visible {
+                cursor_row
+                    .saturating_sub(visible - 1)
+                    .min(visual_rows.len() - visible)
+            } else {
+                0
+            };
+
             let prefix_style = Style::default().fg(accent).add_modifier(Modifier::BOLD);
             let cursor_style = Style::default().fg(Color::Black).bg(Color::White);
 
-            for (i, line_text) in input_lines.iter().enumerate() {
-                if i as u16 >= text_height {
-                    break;
-                }
-                let row = text_area.y + i as u16;
-                let pfx = if i == 0 { "> " } else { "  " };
+            for (vis_idx, (line_idx, range)) in
+                visual_rows.iter().enumerate().skip(scroll).take(visible)
+            {
+                let row = text_area.y + (vis_idx - scroll) as u16;
+                let pfx = if vis_idx == 0 {
+                    "> "
+                } else {
+                    style_tokens::Indent::CONT
+                };
+                let line_text = input_lines[*line_idx];
 
-                if i == cursor_line {
-                    let before = &line_text[..cursor_col];
-                    let (cursor_char, after) = if cursor_col < line_text.len() {
+                if vis_idx == cursor_row {
+                    let col = cursor_col.clamp(range.start, range.end);
+                    let before = &line_text[range.start..col];
+                    let (cursor_char, after) = if col < range.end {
                         // Find the end of the current char (next char boundary)
-                        let ch = line_text[cursor_col..].chars().next().unwrap();
-                        let end = cursor_col + ch.len_utf8();
-                        (&line_text[cursor_col..end], &line_text[end..])
+                        let ch = line_text[col..].chars().next().unwrap();
+                        let end = col + ch.len_utf8();
+                        (&line_text[col..end], &line_text[end..range.end])
                     } else {
                         (" ", "")
                     };
@@ -215,7 +307,7 @@ impl Widget for InputWidget<'_> {
                 } else {
                     let spans = Line::from(vec![
                         Span::styled(pfx, prefix_style),
-                        Span::raw(line_text.to_string()),
+                        Span::raw(line_text[range.clone()].to_string()),
                     ]);
                     buf.set_line(text_area.x, row, &spans, text_area.width);
                 }
