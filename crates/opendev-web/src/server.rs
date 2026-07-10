@@ -50,7 +50,8 @@ pub fn build_app(state: AppState, static_dir: Option<&Path>) -> Router {
         .layer(cors)
         .with_state(state);
 
-    // Serve static files if the directory exists.
+    // Static frontend: a filesystem directory (dev-time override) wins when
+    // present; otherwise fall back to the web-ui bundle embedded in the binary.
     if let Some(dir) = static_dir
         && dir.exists()
     {
@@ -60,6 +61,8 @@ pub fn build_app(state: AppState, static_dir: Option<&Path>) -> Router {
         }
         // SPA fallback: serve index.html for all unmatched paths.
         app = app.fallback_service(ServeDir::new(dir));
+    } else {
+        app = app.fallback(crate::embedded::serve_embedded);
     }
 
     app

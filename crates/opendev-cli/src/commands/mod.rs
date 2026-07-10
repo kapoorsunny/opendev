@@ -399,15 +399,18 @@ pub async fn handle_run(action: RunAction, working_dir: &std::path::Path) {
                 }
             }
 
-            // Serve static files from the Vite build output directory (if present)
-            // Vite outputs to opendev/web/static/ relative to project root
-            let static_dir =
-                PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../opendev/web/static");
-            let static_path = if static_dir.exists() {
-                Some(static_dir)
-            } else {
-                None
-            };
+            // Static frontend assets: the built web-ui bundle is embedded in
+            // the opendev-web crate at compile time and served by default, so
+            // installed binaries work outside a repo checkout (issue #183).
+            // A filesystem directory wins when present as a dev-time override:
+            // OPENDEV_WEB_STATIC_DIR first, then the dev checkout's Vite
+            // output at crates/opendev-web/static.
+            let static_path = std::env::var_os("OPENDEV_WEB_STATIC_DIR")
+                .map(PathBuf::from)
+                .or_else(|| {
+                    Some(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../opendev-web/static"))
+                })
+                .filter(|dir| dir.exists());
 
             if let Err(e) =
                 opendev_web::server::start_server(state, &ui_host, ui_port, static_path.as_deref())
