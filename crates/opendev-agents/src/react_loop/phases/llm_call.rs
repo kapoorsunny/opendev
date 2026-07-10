@@ -44,7 +44,7 @@ pub(in crate::react_loop) async fn execute_llm_call<M>(
     http_client: &AdaptedClient,
     messages: &mut Vec<Value>,
     tool_schemas: &[Value],
-    state: &LoopState,
+    state: &mut LoopState,
     emitter: &IterationEmitter<'_>,
     task_monitor: Option<&M>,
     cancel: Option<&CancellationToken>,
@@ -176,6 +176,21 @@ where
             logger.log_llm_error(state.iteration, err_msg);
         }
         if http_result.retryable {
+            state.consecutive_llm_failures += 1;
+            if state.consecutive_llm_failures >= MAX_CONSECUTIVE_LLM_FAILURES {
+                // Give up: endless silent retries left users staring at a
+                // spinner with no feedback (issues #13, #110). Return a real
+                // error so it reaches the TUI/web error surfaces.
+                warn!(
+                    failures = state.consecutive_llm_failures,
+                    "Giving up after repeated LLM call failures"
+                );
+                return Err(LoopAction::Return(Err(AgentError::LlmError(format!(
+                    "LLM request failed {} times in a row; giving up. Last error: {err_msg}. {}",
+                    state.consecutive_llm_failures,
+                    debug_hint(debug_logger)
+                )))));
+            }
             // Back off before the next iteration. The lower HTTP layer can
             // open a circuit breaker and reject for several seconds; without
             // a sleep here the agent loop spins at sub-millisecond rates,
@@ -187,10 +202,14 @@ where
             tokio::time::sleep(backoff).await;
             return Err(LoopAction::Continue);
         }
-        return Err(LoopAction::Return(Err(AgentError::LlmError(
-            err_msg.to_string(),
-        ))));
+        return Err(LoopAction::Return(Err(AgentError::LlmError(format!(
+            "{err_msg}. {}",
+            debug_hint(debug_logger)
+        )))));
     }
+
+    // Successful call — reset the consecutive-failure counter.
+    state.consecutive_llm_failures = 0;
 
     // Extract body
     let body = http_result.body.ok_or_else(|| {
@@ -245,6 +264,28 @@ where
         llm_latency_ms,
         streaming_executor,
     })
+}
+
+/// Maximum consecutive failed LLM calls before the loop gives up and
+/// returns an error instead of retrying. Bounds the previously infinite
+/// silent retry cycle (issues #13, #110) while still tolerating transient
+/// hiccups (429/5xx/timeouts) that resolve within a few attempts.
+pub(in crate::react_loop) const MAX_CONSECUTIVE_LLM_FAILURES: usize = 5;
+
+/// Build the debug hint appended to surfaced LLM errors.
+///
+/// Points at the active session debug log when `OPENDEV_DEBUG=1` is set;
+/// otherwise tells the user how to enable it.
+pub(in crate::react_loop) fn debug_hint(debug_logger: Option<&SessionDebugLogger>) -> String {
+    match debug_logger.and_then(|l| l.file_path()) {
+        Some(path) => format!(
+            "See the session debug log at {} for details.",
+            path.display()
+        ),
+        None => "Re-run with OPENDEV_DEBUG=1 to capture a session debug log with full request \
+                 details."
+            .to_string(),
+    }
 }
 
 /// Minimum backoff applied to any retryable LLM HTTP failure.

@@ -420,9 +420,12 @@ impl HttpClient {
                             })
                             .unwrap_or_else(|| format!("HTTP {status}"));
 
-                        last_error = Some(HttpError::Other(format!(
-                            "[request_id={request_id}] {error_msg}"
-                        )));
+                        // Transient status (429/5xx): if retries run out, surface
+                        // as RetriesExhausted so callers still classify it as
+                        // retryable, unlike definitive 4xx failures below.
+                        last_error = Some(HttpError::RetriesExhausted {
+                            message: format!("[request_id={request_id}] {error_msg}"),
+                        });
 
                         if attempt < self.retry_config.max_retries {
                             let delay = self.get_retry_delay(
@@ -491,7 +494,9 @@ impl HttpClient {
         }
 
         self.cb_record_failure();
-        Err(last_error.unwrap_or_else(|| HttpError::Other("Streaming retries exhausted".into())))
+        Err(last_error.unwrap_or_else(|| HttpError::RetriesExhausted {
+            message: "Streaming retries exhausted".into(),
+        }))
     }
 
     /// Get the configured API URL.

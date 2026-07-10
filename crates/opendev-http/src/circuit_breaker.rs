@@ -140,7 +140,7 @@ impl CircuitBreaker {
                     remaining_secs = remaining.as_secs(),
                     "Circuit open, rejecting request"
                 );
-                Err(HttpError::Other(format!(
+                Err(HttpError::CircuitOpen(format!(
                     "Circuit breaker open for provider '{}'. \
                      Too many consecutive failures ({}). \
                      Will retry in {}s.",
