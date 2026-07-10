@@ -78,7 +78,10 @@ fn test_credential_store_persistence() {
     // Read with a new instance
     {
         let mut store = CredentialStore::new(Some(auth_path));
-        assert_eq!(store.get_key("testprovider").as_deref(), Some("sk-test-123"));
+        assert_eq!(
+            store.get_key("testprovider").as_deref(),
+            Some("sk-test-123")
+        );
     }
 }
 
