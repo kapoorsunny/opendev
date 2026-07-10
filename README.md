@@ -282,6 +282,8 @@ cd web-ui && npm ci && npm run build
 
 If you're interested in contributing to OpenDev, please open an issue or submit a pull request.
 
+See the [Roadmap](./ROADMAP.md) for current priorities and areas where community contributions are most welcome.
+
 ---
 
 ### How OpenDev Compares
