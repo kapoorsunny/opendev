@@ -153,6 +153,7 @@ fn test_legacy_detection_and_fresh_install_layout() {
 
     // Legacy install: ~/.opendev exists — everything points at it.
     std::fs::create_dir_all(home.join(APP_DIR_NAME)).unwrap();
+    #[cfg_attr(windows, allow(unused_variables))]
     let legacy = Paths::new(Some(PathBuf::from("/tmp/wd")));
 
     // Restore env before asserting to keep the mutation window small.
@@ -177,11 +178,18 @@ fn test_legacy_detection_and_fresh_install_layout() {
         );
     }
 
-    assert_eq!(legacy.config_dir(), legacy_dir.as_path());
-    assert_eq!(legacy.data_dir(), legacy_dir.as_path());
-    assert_eq!(legacy.state_dir(), legacy_dir.as_path());
-    assert_eq!(
-        legacy.cache_dir(),
-        legacy_dir.join(CACHE_DIR_NAME).as_path()
-    );
+    // dirs::home_dir() resolves via the OS profile-folder API on Windows and
+    // ignores the HOME env var, so this test can't steer it there; only
+    // assert the legacy-dir equality on platforms where the override above
+    // actually takes effect.
+    #[cfg(not(windows))]
+    {
+        assert_eq!(legacy.config_dir(), legacy_dir.as_path());
+        assert_eq!(legacy.data_dir(), legacy_dir.as_path());
+        assert_eq!(legacy.state_dir(), legacy_dir.as_path());
+        assert_eq!(
+            legacy.cache_dir(),
+            legacy_dir.join(CACHE_DIR_NAME).as_path()
+        );
+    }
 }
