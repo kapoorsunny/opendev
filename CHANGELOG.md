@@ -5,7 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.1.9] - 2026-07-10
+
+### Added
+
+- Embed the built web UI into the binary (rust-embed), so `opendev run ui`
+  serves the frontend for `cargo install` and release-binary installs, not
+  just repository checkouts (#183)
+- Fall back to the built-in provider list in first-run setup and `/model`
+  switching when the models.dev registry is empty or unreachable; keyless
+  local providers (ollama, lmstudio) skip the API-key prompt (#109, #42)
+- Offline / air-gapped usage documentation covering
+  `OPENDEV_DISABLE_REMOTE_MODELS`, `OPENDEV_API_BASE_URL`, and
+  `OPENDEV_MODELS_DEV_PATH` (#42)
+- Display-width-aware soft-wrapping for long input lines in the TUI, with
+  cursor scroll-into-view (#61)
+- Post-release checksum-verification job that downloads every published
+  artifact and diffs its SHA256 against the manifest, installer, and Homebrew
+  formula (#41, #84)
 
 ### Changed
 
@@ -18,9 +35,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Support/opendev`, `~/Library/Caches/opendev`). Existing `~/.opendev/`
   directories keep working unchanged (legacy mode), with a one-time
   deprecation notice logged per run. `OPENDEV_DIR` still overrides everything.
+- Refreshed ROADMAP.md to reflect the Rust codebase and linked it from the
+  README (#115)
 
 ### Fixed
 
+- Non-interactive (`-p`) mode hanging indefinitely on Anthropic
+  extended-thinking models: capture and echo back thinking signatures across
+  multi-turn requests, disable the tool-approval channel when nothing drains
+  it, and cap agent iterations (#103)
+- Streaming LLM errors (invalid key, wrong base URL, unreachable host) being
+  silently retried forever with no UI feedback; fatal errors now fail fast and
+  the error is surfaced in the TUI and web UI (#13, #110)
+- Web UI serving 404 on installed binaries because the static directory was
+  resolved from a compile-time build path (#183)
+- Session title generation panicking (exit 101) when a multibyte character
+  straddled the truncation boundary (#110)
+- Homebrew SHA256 mismatches: the release pipeline mutated archives after
+  computing checksums, and staged a macOS-only microsandbox resource on all
+  platforms; checksums are now recomputed after bundling and the formula
+  resource is platform-scoped (#41, #84)
 - All remaining hardcoded `~/.opendev` call sites now route through the
   centralized path abstraction, so fresh XDG installs no longer silently flip
   back into legacy mode when the TUI history, tool-output overflow, memory
@@ -32,6 +66,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Global custom agents, slash commands, and skills are now discovered in the
   XDG config/data directories on fresh installs instead of only
   `~/.opendev/...` (#45)
+- Flaky MCP stdio/connection tests that were deterministically broken by lost
+  Python indentation during test extraction (#19)
+- Credential-store persistence test failing on machines with
+  `ANTHROPIC_API_KEY` set
 
 ## [0.1.8] - 2026-04-01
 
