@@ -141,11 +141,12 @@ impl AgentRuntime {
 
         // Step 5: Create tool context
         let shared_state = if plan_requested {
-            let plans_dir = dirs_next::home_dir()
-                .map(|h: std::path::PathBuf| h.join(".opendev").join("plans"))
-                .unwrap_or_else(|| std::path::PathBuf::from("/tmp"));
+            let plans_dir = opendev_config::Paths::default().global_plans_dir();
             let plan_name = opendev_runtime::generate_plan_name(Some(&plans_dir), 50);
-            let plan_path = format!("~/.opendev/plans/{}.md", plan_name);
+            let plan_path = plans_dir
+                .join(format!("{plan_name}.md"))
+                .display()
+                .to_string();
             let mut state = HashMap::new();
             state.insert("planning_phase".to_string(), serde_json::json!("explore"));
             state.insert("plan_file_path".to_string(), serde_json::json!(plan_path));

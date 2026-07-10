@@ -7,6 +7,14 @@ use opendev_runtime::AutonomyLevel;
 
 use crate::repl::{OperationMode, ReplState};
 
+/// Default cache directory for the model picker.
+///
+/// Must match the directory `opendev_config::models_dev::sync_provider_cache`
+/// writes to, otherwise a fresh install sees "No models available".
+pub(crate) fn default_model_cache_dir() -> std::path::PathBuf {
+    opendev_config::Paths::default().global_cache_dir()
+}
+
 /// Outcome of dispatching a slash command.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CommandOutcome {
@@ -145,19 +153,17 @@ impl BuiltinCommands {
 
     /// Display a numbered list of models from the models.dev registry.
     ///
-    /// If `cache_dir` is `None`, uses the default `~/.opendev/cache` directory.
+    /// If `cache_dir` is `None`, uses the default global cache directory
+    /// (the same directory `sync_provider_cache` writes to).
     /// Returns the list of `(provider_id, model_id)` pairs for use by callers
     /// that want to act on the user's selection.
     pub fn handle_model_picker(
         &self,
         cache_dir: Option<&std::path::Path>,
     ) -> Vec<(String, String)> {
-        let cache = cache_dir.map(std::path::PathBuf::from).unwrap_or_else(|| {
-            dirs::home_dir()
-                .unwrap_or_else(|| std::path::PathBuf::from("/tmp"))
-                .join(".opendev")
-                .join("cache")
-        });
+        let cache = cache_dir
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(default_model_cache_dir);
 
         let registry = ModelRegistry::load_from_cache(&cache);
 

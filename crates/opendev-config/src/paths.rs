@@ -37,6 +37,21 @@ pub const ENV_OPENDEV_SESSION_DIR: &str = "OPENDEV_SESSION_DIR";
 pub const ENV_OPENDEV_LOG_DIR: &str = "OPENDEV_LOG_DIR";
 pub const ENV_OPENDEV_CACHE_DIR: &str = "OPENDEV_CACHE_DIR";
 
+/// Emit a one-time deprecation notice when the legacy `~/.opendev` directory
+/// is still in use. Logged at most once per process.
+fn warn_legacy_dir_once(legacy_dir: &Path) {
+    static LEGACY_WARN: std::sync::Once = std::sync::Once::new();
+    LEGACY_WARN.call_once(|| {
+        tracing::warn!(
+            path = %legacy_dir.display(),
+            "Using legacy ~/.opendev directory. Fresh installs use XDG base directories \
+             (config: ~/.config/opendev, data: ~/.local/share/opendev on Linux; \
+             ~/Library/Application Support/opendev on macOS). To migrate, move the \
+             contents of ~/.opendev into the XDG locations and remove ~/.opendev."
+        );
+    });
+}
+
 /// Encode an absolute path into a directory-safe string.
 ///
 /// Replaces `/` with `-` so the result can be used as a single directory name.
@@ -85,6 +100,7 @@ impl Paths {
             .unwrap_or_else(|| PathBuf::from("/tmp"))
             .join(APP_DIR_NAME);
         if legacy_dir.exists() {
+            warn_legacy_dir_once(&legacy_dir);
             return Self {
                 working_dir,
                 config_dir: legacy_dir.clone(),
@@ -209,6 +225,11 @@ impl Paths {
     /// Get global agents directory.
     pub fn global_agents_dir(&self) -> PathBuf {
         self.config_dir.join(AGENTS_DIR_NAME)
+    }
+
+    /// Get global custom commands directory.
+    pub fn global_commands_dir(&self) -> PathBuf {
+        self.config_dir.join(COMMANDS_DIR_NAME)
     }
 
     /// Get global agents.json file path.

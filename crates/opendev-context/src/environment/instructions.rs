@@ -69,24 +69,28 @@ pub fn discover_instruction_files(
         }
     }
 
-    // Check global config locations
+    // Check global config locations. `Paths` resolves to the legacy
+    // ~/.opendev directory when it exists, or the platform config dir on
+    // fresh installs; also check ~/.config/opendev explicitly since users on
+    // macOS may prefer literal XDG paths over ~/Library.
+    let config_dir = opendev_config::Paths::default().config_dir().to_path_buf();
+    let mut global_paths = vec![
+        config_dir.join("instructions.md"),
+        config_dir.join("AGENTS.md"),
+    ];
     if let Some(home) = dirs_next::home_dir() {
-        let global_paths = [
-            home.join(".opendev").join("instructions.md"),
-            home.join(".opendev").join("AGENTS.md"),
-            home.join(".config").join("opendev").join("AGENTS.md"),
-        ];
-        for path in &global_paths {
-            try_add_instruction(
-                path,
-                path.parent().unwrap_or(path),
-                working_dir,
-                exclude_patterns,
-                InstructionSource::Discovery,
-                &mut files,
-                &mut seen,
-            );
-        }
+        global_paths.push(home.join(".config").join("opendev").join("AGENTS.md"));
+    }
+    for path in &global_paths {
+        try_add_instruction(
+            path,
+            path.parent().unwrap_or(path),
+            working_dir,
+            exclude_patterns,
+            InstructionSource::Discovery,
+            &mut files,
+            &mut seen,
+        );
     }
 
     // Check managed/enterprise instructions (never excludable)

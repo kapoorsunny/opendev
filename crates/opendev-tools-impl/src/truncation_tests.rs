@@ -130,3 +130,15 @@ fn test_cleanup_keeps_recent_files() {
     assert!(recent.exists(), "Recent tool file should be kept");
     assert!(non_tool.exists(), "Non-tool file should be untouched");
 }
+
+#[test]
+fn test_output_dir_uses_paths_data_dir() {
+    // Regression for issue #45: truncated tool output must go under the
+    // centralized data dir, not a hardcoded ~/.opendev path.
+    assert_eq!(
+        output_dir(),
+        opendev_config::Paths::default()
+            .data_dir()
+            .join("tool-output")
+    );
+}

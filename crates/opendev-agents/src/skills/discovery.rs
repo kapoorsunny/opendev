@@ -16,11 +16,9 @@ use super::metadata::{self, CompanionFile, LoadedSkill, SkillSource};
 
 /// Detect the source type of a skill directory.
 pub(super) fn detect_source(skill_dir: &Path) -> SkillSource {
-    if let Some(home) = dirs::home_dir() {
-        let global_dir = home.join(".opendev").join("skills");
-        if skill_dir.starts_with(&global_dir) {
-            return SkillSource::UserGlobal;
-        }
+    let global_dir = opendev_config::Paths::default().global_skills_dir();
+    if skill_dir.starts_with(&global_dir) {
+        return SkillSource::UserGlobal;
     }
     SkillSource::Project
 }

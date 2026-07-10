@@ -163,10 +163,8 @@ impl AgentRuntime {
             }
         }
 
-        // Global (home) skill directory
-        if let Some(home) = dirs_next::home_dir() {
-            skill_dirs.push(home.join(".opendev").join("skills"));
-        }
+        // Global skill directory
+        skill_dirs.push(opendev_config::Paths::default().global_skills_dir());
         // Append config-specified skill paths (resolved relative to working_dir, ~/expanded)
         for path in &config.skill_paths {
             let resolved = if let Some(rest) = path.strip_prefix("~/") {

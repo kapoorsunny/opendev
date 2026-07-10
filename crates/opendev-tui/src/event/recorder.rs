@@ -581,13 +581,12 @@ impl EventRecorder {
 
     /// Create a recorder if `OPENDEV_DEBUG_EVENTS=1` is set.
     ///
-    /// Writes to `~/.opendev/debug/events-<timestamp>.jsonl`.
+    /// Writes to `debug/events-<timestamp>.jsonl` in the OpenDev state directory.
     pub fn from_env() -> Option<Self> {
         if std::env::var("OPENDEV_DEBUG_EVENTS").ok()?.as_str() != "1" {
             return None;
         }
-        let home = dirs::home_dir()?;
-        let debug_dir = home.join(".opendev").join("debug");
+        let debug_dir = opendev_config::Paths::default().state_dir().join("debug");
         std::fs::create_dir_all(&debug_dir).ok()?;
         let timestamp = chrono::Utc::now().format("%Y%m%d-%H%M%S");
         let path = debug_dir.join(format!("events-{timestamp}.jsonl"));

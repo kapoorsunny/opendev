@@ -216,11 +216,9 @@ impl CustomCommandLoader {
         }
 
         // User-global commands
-        if let Some(home) = dirs_next::home_dir() {
-            let global = home.join(".opendev/commands");
-            if global.is_dir() {
-                dirs.push((global, "global"));
-            }
+        let global = opendev_config::Paths::default().global_commands_dir();
+        if global.is_dir() {
+            dirs.push((global, "global"));
         }
 
         dirs

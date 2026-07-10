@@ -5,6 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- Adopt the XDG Base Directory Specification (#45). Fresh installs use
+  `$XDG_CONFIG_HOME/opendev` (settings, auth, agents, commands, mcp.json),
+  `$XDG_DATA_HOME/opendev` (sessions, projects, plans, skills, memory,
+  worktrees, snapshots), `$XDG_CACHE_HOME/opendev` (provider cache), and
+  `$XDG_STATE_HOME/opendev` (logs, crash reports, debug recordings) on Linux,
+  or the platform-native equivalents on macOS (`~/Library/Application
+  Support/opendev`, `~/Library/Caches/opendev`). Existing `~/.opendev/`
+  directories keep working unchanged (legacy mode), with a one-time
+  deprecation notice logged per run. `OPENDEV_DIR` still overrides everything.
+
+### Fixed
+
+- All remaining hardcoded `~/.opendev` call sites now route through the
+  centralized path abstraction, so fresh XDG installs no longer silently flip
+  back into legacy mode when the TUI history, tool-output overflow, memory
+  tool, crash reporter, recovery snapshots, worktrees, or web MCP editor
+  write to disk (#45)
+- `/models` picker read its model cache from `~/.opendev/cache` while the
+  provider sync wrote to the XDG cache dir, showing "No models available" on
+  fresh installs (#45)
+- Global custom agents, slash commands, and skills are now discovered in the
+  XDG config/data directories on fresh installs instead of only
+  `~/.opendev/...` (#45)
+
 ## [0.1.8] - 2026-04-01
 
 ### Added

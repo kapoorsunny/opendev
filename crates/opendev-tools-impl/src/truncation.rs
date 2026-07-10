@@ -43,9 +43,8 @@ pub struct TruncateResult {
 
 /// Get the directory for storing truncated tool output.
 pub fn output_dir() -> PathBuf {
-    dirs::home_dir()
-        .unwrap_or_else(|| PathBuf::from("/tmp"))
-        .join(".opendev")
+    opendev_config::Paths::default()
+        .data_dir()
         .join("tool-output")
 }
 

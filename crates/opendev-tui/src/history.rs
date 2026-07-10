@@ -1,7 +1,7 @@
 //! Command history with frecency-based ranking.
 //!
-//! Stores user input history to `~/.opendev/history.json` and supports
-//! Up/Down arrow navigation through previous commands.
+//! Stores user input history to `history.json` in the OpenDev data directory
+//! and supports Up/Down arrow navigation through previous commands.
 
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -38,7 +38,7 @@ pub struct CommandHistory {
 }
 
 impl CommandHistory {
-    /// Create a new command history, loading from `~/.opendev/history.json`
+    /// Create a new command history, loading from `history.json` in the data directory
     /// if it exists.
     pub fn new() -> Self {
         let file_path = Self::default_path();
@@ -180,8 +180,9 @@ impl CommandHistory {
     }
 
     fn default_path() -> PathBuf {
-        let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
-        home.join(".opendev").join("history.json")
+        opendev_config::Paths::default()
+            .data_dir()
+            .join("history.json")
     }
 
     fn load_from_file(path: &PathBuf) -> Vec<HistoryEntry> {

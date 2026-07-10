@@ -152,3 +152,13 @@ fn test_cleanup_old_removes_expired() {
     assert!(persistence.load("old-session").is_none());
     assert!(persistence.load("new-session").is_some());
 }
+
+#[test]
+fn test_default_snapshot_dir_uses_paths_data_dir() {
+    // Regression for issue #45: the default recovery dir must derive from the
+    // centralized Paths abstraction, not a hardcoded ~/.opendev/data path
+    // (which recreated ~/.opendev on fresh XDG installs).
+    let persistence = SnapshotPersistence::new();
+    let expected_base = opendev_config::Paths::default().data_dir().join("recovery");
+    assert!(persistence.snapshot_path("abc").starts_with(&expected_base));
+}

@@ -4,7 +4,10 @@ use tempfile::TempDir;
 #[test]
 fn test_global_config_path_format() {
     let path = global_config_path();
-    assert!(path.ends_with(".opendev/mcp.json"));
+    // Must match the centralized Paths abstraction so the web backend reads
+    // and writes the same mcp.json as the rest of the app.
+    assert_eq!(path, opendev_config::Paths::default().global_mcp_config());
+    assert!(path.ends_with("mcp.json"));
 }
 
 #[test]
