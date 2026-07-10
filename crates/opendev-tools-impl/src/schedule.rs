@@ -40,7 +40,7 @@ impl BaseTool for ScheduleTool {
     }
 
     fn description(&self) -> &str {
-        "Create, list, or remove scheduled tasks. Tasks are persisted to ~/.opendev/schedules.json."
+        "Create, list, or remove scheduled tasks. Tasks are persisted to schedules.json in the OpenDev data directory."
     }
 
     fn parameter_schema(&self) -> serde_json::Value {

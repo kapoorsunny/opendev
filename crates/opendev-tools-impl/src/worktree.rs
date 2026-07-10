@@ -91,14 +91,10 @@ pub struct WorktreeManager {
 impl WorktreeManager {
     /// Create a new manager for the given project directory.
     ///
-    /// Worktrees are stored under `~/.opendev/data/worktree/`.
+    /// Worktrees are stored under `worktree/` in the OpenDev data directory.
     pub fn new(project_dir: impl Into<PathBuf>) -> Self {
         let project_dir = project_dir.into();
-        let worktree_base = dirs::home_dir()
-            .unwrap_or_else(|| PathBuf::from("/tmp"))
-            .join(".opendev")
-            .join("data")
-            .join("worktree");
+        let worktree_base = opendev_config::Paths::default().data_dir().join("worktree");
         Self {
             project_dir,
             worktree_base,

@@ -7,12 +7,9 @@ use crate::error::WebError;
 
 use super::models::{McpConfigFile, McpServerConfig};
 
-/// Get the global MCP config path (~/.opendev/mcp.json).
+/// Get the global MCP config path (`mcp.json` in the OpenDev config directory).
 pub(super) fn global_config_path() -> PathBuf {
-    let home = std::env::var("HOME")
-        .or_else(|_| std::env::var("USERPROFILE"))
-        .unwrap_or_else(|_| "/tmp".to_string());
-    PathBuf::from(home).join(".opendev").join("mcp.json")
+    opendev_config::Paths::default().global_mcp_config()
 }
 
 /// Get the project-level MCP config path (.opendev/mcp.json in working_dir).

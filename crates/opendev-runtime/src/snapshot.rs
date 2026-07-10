@@ -23,16 +23,28 @@ impl SnapshotManager {
             .unwrap_or_else(|_| project_dir.to_path_buf());
         let project_id = compute_project_id(&project_dir);
 
-        let snapshot_dir = dirs_next::home_dir()
-            .unwrap_or_else(|| PathBuf::from("/tmp"))
-            .join(".opendev")
-            .join("data")
+        let snapshot_dir = opendev_config::Paths::default()
+            .data_dir()
             .join("snapshot")
             .join(&project_id);
 
         Self {
             project_dir,
             snapshot_dir,
+            initialized: false,
+        }
+    }
+
+    /// Create a snapshot manager with a custom snapshot directory.
+    ///
+    /// Primarily useful for tests.
+    pub fn with_snapshot_dir(project_dir: &Path, snapshot_dir: impl Into<PathBuf>) -> Self {
+        let project_dir = project_dir
+            .canonicalize()
+            .unwrap_or_else(|_| project_dir.to_path_buf());
+        Self {
+            project_dir,
+            snapshot_dir: snapshot_dir.into(),
             initialized: false,
         }
     }

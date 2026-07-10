@@ -110,11 +110,12 @@ impl QueryProcessor {
 
         // Inject plan reminder if plan mode is active
         if plan_requested {
-            let plans_dir = dirs::home_dir()
-                .map(|h| h.join(".opendev").join("plans"))
-                .unwrap_or_else(|| std::path::PathBuf::from("/tmp"));
+            let plans_dir = opendev_config::Paths::default().global_plans_dir();
             let plan_name = opendev_runtime::generate_plan_name(Some(&plans_dir), 50);
-            let plan_path = format!("~/.opendev/plans/{}.md", plan_name);
+            let plan_path = plans_dir
+                .join(format!("{plan_name}.md"))
+                .display()
+                .to_string();
             let reminder = opendev_agents::prompts::reminders::get_reminder(
                 "plan_subagent_request",
                 &[("plan_file_path", &plan_path)],

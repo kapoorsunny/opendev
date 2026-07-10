@@ -192,3 +192,14 @@ async fn test_remove_in_non_git_dir() {
     let result = mgr.remove("nonexistent", false).await;
     assert!(result.is_err());
 }
+
+#[test]
+fn test_default_worktree_base_uses_paths_data_dir() {
+    // Regression for issue #45: the default worktree base must derive from
+    // the centralized data dir, not a hardcoded ~/.opendev/data path.
+    let mgr = WorktreeManager::new("/tmp/some-project");
+    assert_eq!(
+        mgr.worktree_base(),
+        opendev_config::Paths::default().data_dir().join("worktree")
+    );
+}

@@ -148,9 +148,9 @@ pub fn install_panic_handler() {
 
         report.push_str(&format!("\nBacktrace:\n{}\n", backtrace));
 
-        // Write crash report to ~/.opendev/crash/
-        if let Some(home) = dirs_next::home_dir() {
-            let crash_dir = home.join(".opendev").join("crash");
+        // Write crash report to crash/ in the OpenDev state directory
+        {
+            let crash_dir = opendev_config::Paths::default().state_dir().join("crash");
             if let Ok(()) = std::fs::create_dir_all(&crash_dir) {
                 let filename = format!("crash-{}.log", timestamp);
                 let crash_path = crash_dir.join(&filename);

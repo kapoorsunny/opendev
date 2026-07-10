@@ -159,3 +159,15 @@ fn test_model_picker_empty_cache() {
     unsafe { std::env::remove_var("OPENDEV_DISABLE_REMOTE_MODELS") };
     assert!(entries.is_empty());
 }
+
+#[test]
+fn test_default_model_cache_dir_matches_sync_target() {
+    // Regression for issue #45: the /models picker must read the same cache
+    // directory that `sync_provider_cache` writes to. A hardcoded
+    // ~/.opendev/cache fallback here made fresh XDG installs report
+    // "No models available".
+    assert_eq!(
+        default_model_cache_dir(),
+        opendev_config::Paths::default().global_cache_dir()
+    );
+}

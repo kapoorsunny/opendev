@@ -20,18 +20,10 @@ impl MemoryTool {
 
 /// Resolve the memory directory based on scope and working directory.
 fn resolve_memory_dir(scope: &str, working_dir: &Path) -> Option<PathBuf> {
-    let home = dirs::home_dir()?;
+    let paths = opendev_config::Paths::new(Some(working_dir.to_path_buf()));
     match scope {
-        "global" => Some(home.join(".opendev").join("memory")),
-        _ => {
-            let encoded = opendev_config::paths::encode_project_path(working_dir);
-            Some(
-                home.join(".opendev")
-                    .join("projects")
-                    .join(encoded)
-                    .join("memory"),
-            )
-        }
+        "global" => Some(paths.global_memory_dir()),
+        _ => Some(paths.project_memory_dir()),
     }
 }
 
@@ -44,8 +36,8 @@ impl BaseTool for MemoryTool {
     fn description(&self) -> &str {
         "Read, write, search, or list persistent memory files. \
          Use 'scope' to target project-specific or global storage. \
-         Project scope (default) stores at ~/.opendev/projects/<id>/memory/. \
-         Global scope stores at ~/.opendev/memory/."
+         Project scope (default) stores in the per-project memory directory; \
+         global scope stores in the global memory directory."
     }
 
     fn parameter_schema(&self) -> serde_json::Value {

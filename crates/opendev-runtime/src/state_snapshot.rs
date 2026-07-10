@@ -12,7 +12,7 @@ use tracing::{debug, warn};
 /// Filename used for the crash-recovery snapshot.
 const SNAPSHOT_FILENAME: &str = "session_snapshot.json";
 
-/// Subdirectory under `~/.opendev/data/` where snapshots live.
+/// Subdirectory under the OpenDev data directory where snapshots live.
 const SNAPSHOT_SUBDIR: &str = "recovery";
 
 /// Essential application state that is persisted for crash recovery.
@@ -93,10 +93,8 @@ pub struct SnapshotPersistence {
 impl SnapshotPersistence {
     /// Create a persistence manager using the default snapshot directory.
     pub fn new() -> Self {
-        let snapshot_dir = dirs_next::home_dir()
-            .unwrap_or_else(|| PathBuf::from("/tmp"))
-            .join(".opendev")
-            .join("data")
+        let snapshot_dir = opendev_config::Paths::default()
+            .data_dir()
             .join(SNAPSHOT_SUBDIR);
 
         Self { snapshot_dir }

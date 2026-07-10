@@ -64,6 +64,8 @@ fn test_resolve_memory_dir_project() {
     let dir = resolve_memory_dir("project", Path::new("/tmp/test-project"));
     assert!(dir.is_some());
     let path = dir.unwrap();
+    let paths = opendev_config::Paths::new(Some(std::path::PathBuf::from("/tmp/test-project")));
+    assert_eq!(path, paths.project_memory_dir());
     assert!(path.to_string_lossy().contains("projects"));
     assert!(path.to_string_lossy().contains("memory"));
 }
@@ -73,7 +75,8 @@ fn test_resolve_memory_dir_global() {
     let dir = resolve_memory_dir("global", Path::new("/tmp/test-project"));
     assert!(dir.is_some());
     let path = dir.unwrap();
-    assert!(path.ends_with(Path::new(".opendev").join("memory")));
+    let paths = opendev_config::Paths::new(Some(std::path::PathBuf::from("/tmp/test-project")));
+    assert_eq!(path, paths.global_memory_dir());
 }
 
 #[test]

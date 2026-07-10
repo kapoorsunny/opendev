@@ -85,7 +85,6 @@ impl SubagentManager {
         git_root: Option<&std::path::Path>,
     ) -> Self {
         let mut mgr = Self::with_builtins();
-        let home = dirs::home_dir().unwrap_or_default();
 
         let stop_dir = git_root.unwrap_or(working_dir);
 
@@ -93,7 +92,7 @@ impl SubagentManager {
         let mut dirs = Vec::new();
 
         // 1. Global dir
-        dirs.push(home.join(".opendev").join("agents"));
+        dirs.push(opendev_config::Paths::default().global_agents_dir());
 
         // 2. Walk from working_dir up to git root, collect directory levels
         //    Parent dirs have lower priority than child dirs.

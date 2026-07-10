@@ -19,7 +19,7 @@ fn test_snapshot_dir_location() {
 #[test]
 fn test_take_snapshot_no_files() {
     let tmp = TempDir::new().unwrap();
-    let mut mgr = SnapshotManager::new(tmp.path());
+    let mut mgr = SnapshotManager::with_snapshot_dir(tmp.path(), tmp.path().join("snap"));
     let result = mgr.take_snapshot(&[], "empty");
     assert!(result.is_none());
 }
@@ -27,7 +27,7 @@ fn test_take_snapshot_no_files() {
 #[test]
 fn test_take_snapshot_nonexistent_files() {
     let tmp = TempDir::new().unwrap();
-    let mut mgr = SnapshotManager::new(tmp.path());
+    let mut mgr = SnapshotManager::with_snapshot_dir(tmp.path(), tmp.path().join("snap"));
     let result = mgr.take_snapshot(&["/nonexistent/file.txt"], "test");
     assert!(result.is_none());
 }
@@ -41,7 +41,7 @@ fn test_snapshot_and_revert() {
     let file = project.join("test.txt");
     std::fs::write(&file, "original content").unwrap();
 
-    let mut mgr = SnapshotManager::new(&project);
+    let mut mgr = SnapshotManager::with_snapshot_dir(&project, tmp.path().join("snap"));
 
     // Take snapshot
     let file_str = file.to_string_lossy().to_string();
