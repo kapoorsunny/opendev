@@ -98,11 +98,19 @@ impl LlmCaller {
                 {
                     return true;
                 }
-                match msg.get("content").and_then(|v| v.as_str()) {
-                    Some(s) => !s.trim().is_empty(),
-                    None => {
+                match msg.get("content") {
+                    Some(Value::String(s)) => !s.trim().is_empty(),
+                    // Array content (Anthropic extended-thinking turns) is opaque here;
+                    // keep it whenever non-empty so signed thinking blocks survive.
+                    Some(Value::Array(blocks)) => !blocks.is_empty(),
+                    _ => {
+                        // Keep contentless messages that still carry signed thinking blocks
+                        let has_thinking = msg
+                            .get("_thinking_blocks")
+                            .and_then(|v| v.as_array())
+                            .is_some_and(|b| !b.is_empty());
                         // Keep non-object values (backwards compat) and messages without content
-                        !msg.is_object()
+                        has_thinking || !msg.is_object()
                     }
                 }
             })
@@ -140,17 +148,55 @@ impl LlmCaller {
         result
     }
 
+    /// Normalize a message `content` value into a list of content blocks.
+    ///
+    /// Arrays pass through as-is; non-empty strings become a single text block.
+    fn content_as_blocks(content: Option<&Value>) -> Vec<Value> {
+        match content {
+            Some(Value::Array(blocks)) => blocks.clone(),
+            Some(Value::String(s)) if !s.trim().is_empty() => {
+                vec![serde_json::json!({"type": "text", "text": s})]
+            }
+            _ => Vec::new(),
+        }
+    }
+
     /// Merge `source` message content and tool_calls into `target`.
     fn merge_into(target: &mut Value, source: &Value) {
-        let target_content = target.get("content").and_then(|v| v.as_str()).unwrap_or("");
-        let source_content = source.get("content").and_then(|v| v.as_str()).unwrap_or("");
+        let either_is_array = target.get("content").is_some_and(Value::is_array)
+            || source.get("content").is_some_and(Value::is_array);
 
-        let merged_content = match (target_content.is_empty(), source_content.is_empty()) {
-            (_, true) => target_content.to_string(),
-            (true, _) => source_content.to_string(),
-            _ => format!("{target_content}\n\n{source_content}"),
-        };
-        target["content"] = Value::String(merged_content);
+        if either_is_array {
+            // Block-structured content (Anthropic extended thinking): concatenate
+            // block lists instead of flattening to a string, which would discard
+            // signed thinking blocks.
+            let mut blocks = Self::content_as_blocks(target.get("content"));
+            blocks.extend(Self::content_as_blocks(source.get("content")));
+            target["content"] = Value::Array(blocks);
+        } else {
+            let target_content = target.get("content").and_then(|v| v.as_str()).unwrap_or("");
+            let source_content = source.get("content").and_then(|v| v.as_str()).unwrap_or("");
+
+            let merged_content = match (target_content.is_empty(), source_content.is_empty()) {
+                (_, true) => target_content.to_string(),
+                (true, _) => source_content.to_string(),
+                _ => format!("{target_content}\n\n{source_content}"),
+            };
+            target["content"] = Value::String(merged_content);
+        }
+
+        // Merge _thinking_blocks so signatures from the merged-away message survive
+        if let Some(source_blocks) = source.get("_thinking_blocks").and_then(|v| v.as_array())
+            && !source_blocks.is_empty()
+        {
+            let mut combined = target
+                .get("_thinking_blocks")
+                .and_then(|v| v.as_array())
+                .cloned()
+                .unwrap_or_default();
+            combined.extend(source_blocks.iter().cloned());
+            target["_thinking_blocks"] = Value::Array(combined);
+        }
 
         // Merge tool_calls arrays (relevant for assistant messages)
         if let Some(source_tc) = source.get("tool_calls").and_then(|v| v.as_array())

@@ -154,7 +154,10 @@ fn test_parse_response_uses_reasoning_content_when_content_empty() {
     let resp = caller.parse_action_response(&body);
     assert!(resp.success);
     assert_eq!(resp.content.as_deref(), Some("I am Kimi Code 2.7."));
-    assert_eq!(resp.reasoning_content.as_deref(), Some("I am Kimi Code 2.7."));
+    assert_eq!(
+        resp.reasoning_content.as_deref(),
+        Some("I am Kimi Code 2.7.")
+    );
 }
 
 #[test]
@@ -333,4 +336,76 @@ fn test_clean_messages_preserves_thinking_blocks() {
     assert!(msg.get("_other_internal").is_none());
     assert!(msg.get("tool_calls").is_some());
     assert_eq!(msg.get("reasoning_content").unwrap(), "some reasoning");
+}
+
+#[test]
+fn test_keep_assistant_with_array_content_no_tool_calls() {
+    // Anthropic extended-thinking turns produce array content. A pure-text turn
+    // (no tool_calls) must not be dropped by the whitespace filter.
+    let content = serde_json::json!([
+        {"type": "thinking", "thinking": "...", "signature": "sig123"},
+        {"type": "text", "text": "final answer"}
+    ]);
+    let messages = vec![
+        serde_json::json!({"role": "user", "content": "hello"}),
+        serde_json::json!({"role": "assistant", "content": content.clone()}),
+    ];
+    let cleaned = LlmCaller::clean_messages(&messages);
+    assert_eq!(cleaned.len(), 2);
+    assert_eq!(cleaned[1]["content"], content);
+}
+
+#[test]
+fn test_keep_contentless_assistant_with_thinking_blocks() {
+    // An assistant message with no content but signed thinking blocks must survive
+    // so the signatures can be echoed back on the next request.
+    let blocks =
+        serde_json::json!([{"type": "thinking", "thinking": "...", "signature": "sig123"}]);
+    let messages = vec![
+        serde_json::json!({"role": "user", "content": "hello"}),
+        serde_json::json!({"role": "assistant", "content": null, "_thinking_blocks": blocks.clone()}),
+    ];
+    let cleaned = LlmCaller::clean_messages(&messages);
+    assert_eq!(cleaned.len(), 2);
+    assert_eq!(cleaned[1].get("_thinking_blocks").unwrap(), &blocks);
+}
+
+#[test]
+fn test_merge_consecutive_preserves_array_content() {
+    // Merging a string-content assistant message into one with block-structured
+    // content must concatenate block lists, not flatten to a string.
+    let messages = vec![
+        serde_json::json!({"role": "assistant", "content": [
+            {"type": "thinking", "thinking": "...", "signature": "sig123"},
+            {"type": "text", "text": "part one"}
+        ]}),
+        serde_json::json!({"role": "assistant", "content": "part two"}),
+    ];
+    let cleaned = LlmCaller::clean_messages(&messages);
+    assert_eq!(cleaned.len(), 1);
+    let blocks = cleaned[0]["content"].as_array().expect("array content");
+    assert_eq!(blocks.len(), 3);
+    assert_eq!(blocks[0]["signature"], "sig123");
+    assert_eq!(blocks[2]["text"], "part two");
+}
+
+#[test]
+fn test_merge_consecutive_combines_thinking_blocks() {
+    // _thinking_blocks from a merged-away message must be carried into the target.
+    let messages = vec![
+        serde_json::json!({
+            "role": "assistant", "content": "a",
+            "_thinking_blocks": [{"type": "thinking", "thinking": "t1", "signature": "s1"}]
+        }),
+        serde_json::json!({
+            "role": "assistant", "content": "b",
+            "_thinking_blocks": [{"type": "thinking", "thinking": "t2", "signature": "s2"}]
+        }),
+    ];
+    let cleaned = LlmCaller::clean_messages(&messages);
+    assert_eq!(cleaned.len(), 1);
+    let blocks = cleaned[0]["_thinking_blocks"].as_array().expect("blocks");
+    assert_eq!(blocks.len(), 2);
+    assert_eq!(blocks[0]["signature"], "s1");
+    assert_eq!(blocks[1]["signature"], "s2");
 }
